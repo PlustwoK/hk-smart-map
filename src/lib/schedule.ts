@@ -32,7 +32,31 @@ function clockOf(time: string | undefined) {
   return time.slice(11, 16)
 }
 
-function readArrivals(trains: unknown): Arrival[] {
+function parseHongKongTimestamp(value: string | undefined) {
+  if (!value) return null
+  const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(value.trim())
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const hour = Number(match[4])
+  const minute = Number(match[5])
+  const second = Number(match[6])
+  return Date.UTC(year, month - 1, day, hour - 8, minute, second)
+}
+
+function minutesUntilLabel(arrivalTime: string | undefined, currentTime: string | undefined) {
+  const arrival = parseHongKongTimestamp(arrivalTime)
+  const current = parseHongKongTimestamp(currentTime)
+  if (arrival == null || current == null) return '—'
+  let diffMs = arrival - current
+  if (diffMs < -18 * 60 * 60 * 1000) diffMs += 24 * 60 * 60 * 1000
+  const minutes = Math.round(diffMs / 60_000)
+  if (minutes <= 0) return '即將到站'
+  return `${minutes} 分鐘`
+}
+
+function readArrivals(trains: unknown, currentTime: string | undefined): Arrival[] {
   if (!Array.isArray(trains)) return []
   return trains
     .filter((train): train is RawTrain => Boolean(train) && typeof train === 'object')
@@ -40,7 +64,7 @@ function readArrivals(trains: unknown): Arrival[] {
     .sort((a, b) => Number(a.seq ?? 0) - Number(b.seq ?? 0))
     .map((train) => ({
       destination: stationName(train.dest ?? ''),
-      minutesLabel: train.ttnt === '0' ? '即將到站' : `${train.ttnt ?? '—'} 分鐘`,
+      minutesLabel: minutesUntilLabel(train.time, currentTime),
       platform: train.plat ? `${train.plat} 號月台` : '',
       clock: clockOf(train.time),
     }))
@@ -75,17 +99,22 @@ export async function loadLineSchedule(line: string, station: string): Promise<L
       message?: string
       isdelay?: string
       curr_time?: string
-      data?: Record<string, { UP?: unknown; DOWN?: unknown }>
+      data?: Record<string, { UP?: unknown; DOWN?: unknown; curr_time?: string }>
     }
     if (body.status === 0 || body.status === '0') {
       return { ...base, state: 'error', message: emptyMessage(String(body.message ?? '')) }
     }
     const block = body.data?.[`${line}-${station}`]
-    const up = readArrivals(block?.UP)
-    const down = readArrivals(block?.DOWN)
-    const arrivals = [...up, ...down]
+    const updatedAt = body.curr_time ?? block?.curr_time
     const delayed = body.isdelay === 'Y'
-    const updatedAt = body.curr_time
+    const upListed = Array.isArray(block?.UP)
+    const downListed = Array.isArray(block?.DOWN)
+    if (!upListed && !downListed) {
+      return { ...base, state: 'error', message: '暫時取不到到站資料。', delayed, updatedAt }
+    }
+    const up = readArrivals(upListed ? block?.UP : [], updatedAt)
+    const down = readArrivals(downListed ? block?.DOWN : [], updatedAt)
+    const arrivals = [...up, ...down]
     if (arrivals.length === 0) {
       return {
         ...base,
@@ -95,7 +124,7 @@ export async function loadLineSchedule(line: string, station: string): Promise<L
         updatedAt,
       }
     }
-    const oneSideQuiet = up.length === 0 || down.length === 0
+    const oneSideQuiet = upListed && downListed && (up.length === 0 || down.length === 0)
     return {
       ...base,
       state: 'ready',

@@ -101,7 +101,7 @@ async function overpass(query) {
           signal: AbortSignal.timeout(50000),
         })
         if (!response.ok) throw new Error(`${response.status} ${endpoint}`)
-        return response.json()
+        return await response.json()
       } catch (error) {
         lastError = error
         console.log(`overpass failed: ${error.message}`)

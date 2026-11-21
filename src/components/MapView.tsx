@@ -33,6 +33,7 @@ export function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Map | null>(null)
+  const layersReadyRef = useRef(false)
   const handlersRef = useRef({ onSelectStation, onSelectCamera, onStyleFailure, showMtr, showCameras })
 
   useEffect(() => {
@@ -175,6 +176,8 @@ export function MapView({
         if (camera && typeof camera.properties?.key === 'string') pickCamera(camera.properties.key)
       })
 
+      layersReadyRef.current = true
+
       map.on('mouseenter', 'stations', () => {
         map.getCanvas().style.cursor = 'pointer'
       })
@@ -197,6 +200,7 @@ export function MapView({
 
     return () => {
       window.clearTimeout(styleTimer)
+      layersReadyRef.current = false
       map.remove()
       mapRef.current = null
     }
@@ -209,8 +213,7 @@ export function MapView({
       const source = map.getSource('cameras')
       if (source instanceof GeoJSONSource) source.setData(cameraFeatures(cameras))
     }
-    if (map.getSource('cameras')) apply()
-    else map.once('load', apply)
+    return bindWhenReady(map, layersReadyRef, apply)
   }, [cameras])
 
   useEffect(() => {
@@ -224,8 +227,7 @@ export function MapView({
         if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', showCameras ? 'visible' : 'none')
       }
     }
-    if (map.isStyleLoaded()) apply()
-    else map.once('load', apply)
+    return bindWhenReady(map, layersReadyRef, apply)
   }, [showMtr, showCameras])
 
   useEffect(() => {
@@ -235,9 +237,9 @@ export function MapView({
       if (!map.getSource('stations')) return
       map.setFeatureState({ source: 'stations', id: selectedStation }, { selected: true })
     }
-    if (map.getSource('stations')) apply()
-    else map.once('load', apply)
+    const cancel = bindWhenReady(map, layersReadyRef, apply)
     return () => {
+      cancel?.()
       if (map.getSource('stations')) map.removeFeatureState({ source: 'stations', id: selectedStation })
     }
   }, [selectedStation])
@@ -254,8 +256,7 @@ export function MapView({
         bottom: panelOpen && !wide ? Math.round(window.innerHeight * 0.46) : 36,
       })
     }
-    if (map.isStyleLoaded()) apply()
-    else map.once('load', apply)
+    return bindWhenReady(map, layersReadyRef, apply)
   }, [panelOpen])
 
   useEffect(() => {
@@ -268,11 +269,21 @@ export function MapView({
         essential: true,
       })
     }
-    if (map.isStyleLoaded()) apply()
-    else map.once('load', apply)
+    return bindWhenReady(map, layersReadyRef, apply)
   }, [focus])
 
   return <div ref={containerRef} className="h-full w-full" />
+}
+
+function bindWhenReady(map: Map, ready: { current: boolean }, apply: () => void) {
+  if (ready.current) {
+    apply()
+    return
+  }
+  map.once('load', apply)
+  return () => {
+    map.off('load', apply)
+  }
 }
 
 function fontStack(map: Map): string[] {
