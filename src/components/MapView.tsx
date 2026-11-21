@@ -65,7 +65,7 @@ export function MapView({
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 3.25,
-          'line-opacity': 0.92,
+          'line-opacity': 1,
         },
       })
 

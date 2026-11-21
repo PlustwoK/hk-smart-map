@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -347,12 +347,20 @@ for (const segment of segments) {
   }
 }
 
+let tracks = []
+try {
+  tracks = JSON.parse(readFileSync(join(root, 'src/data/network.json'), 'utf8')).tracks ?? []
+} catch {
+  tracks = []
+}
+
 const network = {
   source:
-    '車站名稱與行車次序來自港鐵公開資料 mtr_lines_and_stations.csv。馬場站名稱來自到站接口說明。座標來自 OpenStreetMap。',
+    '車站名稱與行車次序來自港鐵公開資料 mtr_lines_and_stations.csv。馬場站名稱來自到站接口說明。車站座標和路軌形狀來自 OpenStreetMap。',
   lines: LINES,
   stations,
   segments,
+  tracks,
 }
 
 const target = join(root, 'src/data/network.json')

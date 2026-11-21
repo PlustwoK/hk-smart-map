@@ -27,28 +27,39 @@ export function getLine(code: string) {
 }
 
 export function lineFeatures() {
-  return {
-    type: 'FeatureCollection' as const,
-    features: network.segments.map((segment) => {
-      const from = stationByCode.get(segment.from)
-      const to = stationByCode.get(segment.to)
-      const line = lineByCode.get(segment.line)
-      return {
-        type: 'Feature' as const,
-        properties: {
-          line: segment.line,
-          color: line?.color ?? '#444',
-        },
-        geometry: {
-          type: 'LineString' as const,
-          coordinates: [
-            [from?.lon ?? 0, from?.lat ?? 0],
-            [to?.lon ?? 0, to?.lat ?? 0],
-          ],
-        },
-      }
-    }),
-  }
+  const tracks = network.tracks ?? []
+  const features =
+    tracks.length > 0
+      ? tracks.map((track) => ({
+          type: 'Feature' as const,
+          properties: {
+            line: track.line,
+            color: lineByCode.get(track.line)?.color ?? '#444',
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: track.coordinates,
+          },
+        }))
+      : network.segments.map((segment) => {
+          const from = stationByCode.get(segment.from)
+          const to = stationByCode.get(segment.to)
+          return {
+            type: 'Feature' as const,
+            properties: {
+              line: segment.line,
+              color: lineByCode.get(segment.line)?.color ?? '#444',
+            },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: [
+                [from?.lon ?? 0, from?.lat ?? 0],
+                [to?.lon ?? 0, to?.lat ?? 0],
+              ],
+            },
+          }
+        })
+  return { type: 'FeatureCollection' as const, features }
 }
 
 export function stationFeatures() {

@@ -101,7 +101,7 @@ function StationBody({ station }: { station: Station }) {
       ))}
       <Separator />
       <p className="text-xs leading-5 text-stone-500">
-        到站資料來自港鐵實時列車服務資訊，只在點選車站時查詢。路綫以車站之間的直線連接，不是真實軌道。
+        到站資料來自港鐵實時列車服務資訊，只在點選車站時查詢。路綫形狀來自 OpenStreetMap 的路軌。
       </p>
     </div>
   )
