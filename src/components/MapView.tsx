@@ -19,7 +19,7 @@ type MapViewProps = {
   onStyleFailure: () => void
 }
 
-const MTR_LAYERS = ['mtr-lines', 'stations', 'station-labels', 'train-points']
+const MTR_LAYERS = ['mtr-lines', 'stations', 'station-labels', 'train-points', 'train-labels']
 const CAMERA_LAYERS = ['camera-clusters', 'camera-count', 'camera-points']
 
 export function MapView({
@@ -104,19 +104,6 @@ export function MapView({
         },
       })
 
-      map.addSource('trains', { type: 'geojson', data: trainFeatures([]) })
-      map.addLayer({
-        id: 'train-points',
-        type: 'circle',
-        source: 'trains',
-        paint: {
-          'circle-radius': 6.5,
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
-        },
-      })
-
       map.addSource('cameras', {
         type: 'geojson',
         data: cameraFeatures([]),
@@ -162,16 +149,48 @@ export function MapView({
         },
       })
 
+      map.addSource('trains', { type: 'geojson', data: trainFeatures([]) })
+      map.addLayer({
+        id: 'train-points',
+        type: 'circle',
+        source: 'trains',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 8, 12, 11, 15, 16],
+          'circle-color': '#ffffff',
+          'circle-stroke-width': 4,
+          'circle-stroke-color': ['get', 'color'],
+        },
+      })
+      map.addLayer({
+        id: 'train-labels',
+        type: 'symbol',
+        source: 'trains',
+        minzoom: 13,
+        layout: {
+          'text-field': ['concat', '往', ['get', 'destination']],
+          'text-font': textFont,
+          'text-size': 11,
+          'text-offset': [0, 1.15],
+          'text-anchor': 'top',
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': '#1c1917',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1.4,
+        },
+      })
+
       map.on('click', (event) => {
         const { showMtr: mtrOn, showCameras: camerasOn, onSelectStation: pickStation, onSelectCamera: pickCamera } =
           handlersRef.current
         const layers = [
-          ...(mtrOn ? ['train-points', 'stations'] : []),
+          ...(mtrOn ? ['train-labels', 'train-points', 'stations'] : []),
           ...(camerasOn ? ['camera-clusters', 'camera-points'] : []),
         ].filter((layer) => map.getLayer(layer))
         if (layers.length === 0) return
         const features = map.queryRenderedFeatures(event.point, { layers })
-        const train = features.find((feature) => feature.layer.id === 'train-points')
+        const train = features.find((feature) => feature.layer.id === 'train-points' || feature.layer.id === 'train-labels')
         if (train?.geometry.type === 'Point') {
           const properties = train.properties ?? {}
           const content = document.createElement('div')
@@ -222,7 +241,7 @@ export function MapView({
       map.on('mouseleave', 'stations', () => {
         map.getCanvas().style.cursor = ''
       })
-      for (const layer of ['camera-points', 'camera-clusters', 'train-points']) {
+      for (const layer of ['camera-points', 'camera-clusters', 'train-points', 'train-labels']) {
         map.on('mouseenter', layer, () => {
           map.getCanvas().style.cursor = 'pointer'
         })

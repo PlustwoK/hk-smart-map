@@ -191,7 +191,7 @@ export default function App() {
         ) : null}
         {showMtr && !trainsLoading && fleet.state === 'ready' ? (
           <p className="pointer-events-auto w-fit rounded-full bg-white/95 px-3 py-1 text-xs text-stone-600 shadow">
-            {fleet.trains.length} 班行駛中，位置按到站時間估算。
+            {fleet.trains.length} 班列車。路軌上的白色圓點就是列車。
             {fleet.delayed ? ' 部分路綫有延誤。' : ''}
             {fleet.message ? ` ${fleet.message}` : ''}
           </p>
