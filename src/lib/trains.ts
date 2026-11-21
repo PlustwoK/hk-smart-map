@@ -11,6 +11,8 @@ export type RunningTrain = {
   minutesLabel: string
   lon: number
   lat: number
+  etaMs: number
+  path: [number, number][]
   delayed: boolean
 }
 
@@ -143,13 +145,12 @@ function pointAtFraction(coords: [number, number][], fraction: number) {
   return { lon: last[0], lat: last[1] }
 }
 
-function place(line: string, from: string, to: string, fraction: number) {
+function segmentCoords(line: string, from: string, to: string) {
   const start = getStation(from)
   const end = getStation(to)
   if (!start || !end) return null
   const projectedStart = projectionOf(line, from)
   const projectedEnd = projectionOf(line, to)
-  let coords: [number, number][]
   if (
     projectedStart &&
     projectedEnd &&
@@ -157,18 +158,32 @@ function place(line: string, from: string, to: string, fraction: number) {
     projectedStart.index !== projectedEnd.index
   ) {
     const track = tracks[projectedStart.track].coordinates
-    coords = (
+    return (
       projectedStart.index < projectedEnd.index
         ? track.slice(projectedStart.index, projectedEnd.index + 1)
         : track.slice(projectedEnd.index, projectedStart.index + 1).reverse()
     ) as [number, number][]
-  } else {
-    coords = [
-      [start.lon, start.lat],
-      [end.lon, end.lat],
-    ]
   }
-  return pointAtFraction(coords, fraction)
+  return [
+    [start.lon, start.lat],
+    [end.lon, end.lat],
+  ] as [number, number][]
+}
+
+const SEGMENT_MINUTES = 3.5
+
+function fractionAt(minutes: number) {
+  return Math.min(0.94, Math.max(0.08, 1 - Math.max(minutes, 0) / SEGMENT_MINUTES))
+}
+
+export function locateTrain(train: RunningTrain, now = Date.now()) {
+  const minutes = (train.etaMs - now) / 60_000
+  const point = pointAtFraction(train.path, fractionAt(minutes))
+  const rounded = Math.round(minutes)
+  return {
+    ...point,
+    minutesLabel: rounded <= 0 ? '即將到站' : `${rounded} 分鐘`,
+  }
 }
 
 function firstTrain(trains: unknown, currentMs: number, now: string | undefined) {
@@ -280,15 +295,14 @@ function dedupe(hits: Hit[]) {
 function toTrain(hit: Hit): RunningTrain | null {
   const info = getLine(hit.line)
   const previous = previousStation(hit.line, hit.station, hit.dest)
-  const fraction = Math.min(0.94, Math.max(0.08, 1 - Math.max(hit.minutes, 0) / 3.5))
-  const point = previous
-    ? place(hit.line, previous, hit.station, fraction)
-    : (() => {
-        const station = getStation(hit.station)
-        return station ? { lon: station.lon, lat: station.lat } : null
-      })()
-  if (!point) return null
-  return {
+  const station = getStation(hit.station)
+  const path = previous
+    ? segmentCoords(hit.line, previous, hit.station)
+    : station
+      ? ([[station.lon, station.lat]] as [number, number][])
+      : null
+  if (!path) return null
+  const train: RunningTrain = {
     id: `${hit.line}-${hit.station}-${hit.dest}-${hit.etaMs}`,
     line: hit.line,
     lineName: info?.name ?? hit.line,
@@ -296,31 +310,38 @@ function toTrain(hit: Hit): RunningTrain | null {
     destination: stationName(hit.dest),
     nextStation: stationName(hit.station),
     minutesLabel: hit.minutes <= 0 ? '即將到站' : `${hit.minutes} 分鐘`,
-    lon: point.lon,
-    lat: point.lat,
+    lon: path[0][0],
+    lat: path[0][1],
+    etaMs: hit.etaMs,
+    path,
     delayed: hit.delayed,
   }
+  const point = locateTrain(train)
+  return { ...train, ...point }
 }
 
-export function trainFeatures(trains: RunningTrain[]) {
+export function trainFeatures(trains: RunningTrain[], now = Date.now()) {
   return {
     type: 'FeatureCollection' as const,
-    features: trains.map((train) => ({
-      type: 'Feature' as const,
-      properties: {
-        id: train.id,
-        color: train.color,
-        lineName: train.lineName,
-        destination: train.destination,
-        nextStation: train.nextStation,
-        minutesLabel: train.minutesLabel,
-        delayed: train.delayed ? 'Y' : 'N',
-      },
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [train.lon, train.lat],
-      },
-    })),
+    features: trains.map((train) => {
+      const point = locateTrain(train, now)
+      return {
+        type: 'Feature' as const,
+        properties: {
+          id: train.id,
+          color: train.color,
+          lineName: train.lineName,
+          destination: train.destination,
+          nextStation: train.nextStation,
+          minutesLabel: point.minutesLabel,
+          delayed: train.delayed ? 'Y' : 'N',
+        },
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [point.lon, point.lat],
+        },
+      }
+    }),
   }
 }
 

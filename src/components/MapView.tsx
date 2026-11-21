@@ -276,11 +276,19 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
+    let timer = 0
     const apply = () => {
       const source = map.getSource('trains')
-      if (source instanceof GeoJSONSource) source.setData(trainFeatures(trains))
+      if (source instanceof GeoJSONSource) source.setData(trainFeatures(trains, Date.now()))
     }
-    return bindWhenReady(map, layersReadyRef, apply)
+    const cancel = bindWhenReady(map, layersReadyRef, () => {
+      apply()
+      timer = window.setInterval(apply, 1000)
+    })
+    return () => {
+      cancel?.()
+      window.clearInterval(timer)
+    }
   }, [trains])
 
   useEffect(() => {

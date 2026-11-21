@@ -195,7 +195,7 @@ export default function App() {
         ) : null}
         {showMtr && !trainsLoading && fleet.state === 'ready' ? (
           <p className="pointer-events-auto w-fit rounded-full bg-white/95 px-3 py-1 text-xs text-stone-600 shadow">
-            {fleet.trains.length} 班列車。路軌上的白色圓點就是列車。
+            {fleet.trains.length} 班列車。白色圓點每秒沿路軌移向下一站。
             {fleet.delayed ? ' 部分路綫有延誤。' : ''}
             {fleet.message ? ` ${fleet.message}` : ''}
           </p>
@@ -233,7 +233,7 @@ function Legend() {
         ))}
       </ul>
             <p className="mt-2 text-xs leading-5 text-stone-500">
-              彩色圓點是行駛中的列車。點車站查看到站班次，點橙色點查看最新照片。
+              白色圓點是行駛中的列車，會沿路軌移動。點車站查看到站班次，點橙色點查看最新照片。
             </p>
     </aside>
   )
