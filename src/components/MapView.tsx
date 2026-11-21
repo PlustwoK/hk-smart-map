@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { GeoJSONSource, Map, NavigationControl } from 'maplibre-gl'
+import { GeoJSONSource, Map, NavigationControl, Popup } from 'maplibre-gl'
 import { cameraFeatures, type TrafficCamera } from '@/lib/cameras'
 import { lineFeatures, stationFeatures } from '@/lib/network'
+import { trainFeatures, type RunningTrain } from '@/lib/trains'
 
 type Focus = { lon: number; lat: number; token: number }
 
@@ -9,6 +10,7 @@ type MapViewProps = {
   showMtr: boolean
   showCameras: boolean
   cameras: TrafficCamera[]
+  trains: RunningTrain[]
   selectedStation: string | null
   panelOpen: boolean
   focus: Focus | null
@@ -17,13 +19,14 @@ type MapViewProps = {
   onStyleFailure: () => void
 }
 
-const MTR_LAYERS = ['mtr-lines', 'stations', 'station-labels']
+const MTR_LAYERS = ['mtr-lines', 'stations', 'station-labels', 'train-points']
 const CAMERA_LAYERS = ['camera-clusters', 'camera-count', 'camera-points']
 
 export function MapView({
   showMtr,
   showCameras,
   cameras,
+  trains,
   selectedStation,
   panelOpen,
   focus,
@@ -101,6 +104,19 @@ export function MapView({
         },
       })
 
+      map.addSource('trains', { type: 'geojson', data: trainFeatures([]) })
+      map.addLayer({
+        id: 'train-points',
+        type: 'circle',
+        source: 'trains',
+        paint: {
+          'circle-radius': 6.5,
+          'circle-color': ['get', 'color'],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff',
+        },
+      })
+
       map.addSource('cameras', {
         type: 'geojson',
         data: cameraFeatures([]),
@@ -150,11 +166,33 @@ export function MapView({
         const { showMtr: mtrOn, showCameras: camerasOn, onSelectStation: pickStation, onSelectCamera: pickCamera } =
           handlersRef.current
         const layers = [
-          ...(mtrOn ? ['stations'] : []),
+          ...(mtrOn ? ['train-points', 'stations'] : []),
           ...(camerasOn ? ['camera-clusters', 'camera-points'] : []),
         ].filter((layer) => map.getLayer(layer))
         if (layers.length === 0) return
         const features = map.queryRenderedFeatures(event.point, { layers })
+        const train = features.find((feature) => feature.layer.id === 'train-points')
+        if (train?.geometry.type === 'Point') {
+          const properties = train.properties ?? {}
+          const content = document.createElement('div')
+          content.style.fontSize = '14px'
+          content.style.lineHeight = '1.45'
+          const title = document.createElement('strong')
+          title.textContent = `往${properties.destination ?? ''}`
+          const detail = document.createElement('div')
+          detail.textContent = `${properties.lineName ?? ''} · 下一站${properties.nextStation ?? ''} · ${properties.minutesLabel ?? ''}`
+          content.append(title, detail)
+          if (properties.delayed === 'Y') {
+            const delay = document.createElement('div')
+            delay.textContent = '此路綫有延誤'
+            content.append(delay)
+          }
+          new Popup({ closeButton: true, offset: 10, maxWidth: '240px' })
+            .setLngLat(train.geometry.coordinates as [number, number])
+            .setDOMContent(content)
+            .addTo(map)
+          return
+        }
         const station = features.find((feature) => feature.layer.id === 'stations')
         if (station && typeof station.properties?.code === 'string') {
           pickStation(station.properties.code)
@@ -184,7 +222,7 @@ export function MapView({
       map.on('mouseleave', 'stations', () => {
         map.getCanvas().style.cursor = ''
       })
-      for (const layer of ['camera-points', 'camera-clusters']) {
+      for (const layer of ['camera-points', 'camera-clusters', 'train-points']) {
         map.on('mouseenter', layer, () => {
           map.getCanvas().style.cursor = 'pointer'
         })
@@ -215,6 +253,16 @@ export function MapView({
     }
     return bindWhenReady(map, layersReadyRef, apply)
   }, [cameras])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const apply = () => {
+      const source = map.getSource('trains')
+      if (source instanceof GeoJSONSource) source.setData(trainFeatures(trains))
+    }
+    return bindWhenReady(map, layersReadyRef, apply)
+  }, [trains])
 
   useEffect(() => {
     const map = mapRef.current

@@ -10,6 +10,10 @@ export const lines: LineInfo[] = network.lines
 
 export const stations: Station[] = network.stations
 
+export const segments = network.segments
+
+export const tracks = network.tracks ?? []
+
 const stationByCode = new Map(stations.map((station) => [station.code, station]))
 
 const lineByCode = new Map(lines.map((line) => [line.code, line]))

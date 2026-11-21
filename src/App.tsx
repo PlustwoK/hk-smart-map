@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { loadCameras, type TrafficCamera } from '@/lib/cameras'
 import { lines, stations, type Station } from '@/lib/network'
+import { loadRunningTrains, type Fleet } from '@/lib/trains'
 
 type Focus = { lon: number; lat: number; token: number }
 
@@ -19,6 +20,8 @@ export default function App() {
   const [selectedStation, setSelectedStation] = useState<string | null>(null)
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null)
   const [focus, setFocus] = useState<Focus | null>(null)
+  const [fleet, setFleet] = useState<Fleet>({ state: 'ready', trains: [], delayed: false })
+  const [trainsLoading, setTrainsLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -35,6 +38,25 @@ export default function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!showMtr) return
+    let cancelled = false
+    let timer = 0
+    const run = () => {
+      void loadRunningTrains().then((next) => {
+        if (cancelled) return
+        setFleet(next)
+        setTrainsLoading(false)
+        timer = window.setTimeout(run, next.state === 'error' && next.message?.includes('頻密') ? 60_000 : 30_000)
+      })
+    }
+    run()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [showMtr])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -86,6 +108,7 @@ export default function App() {
           showMtr={showMtr}
           showCameras={showCameras}
           cameras={cameras}
+          trains={showMtr ? fleet.trains : []}
           selectedStation={selectedStation}
           panelOpen={Boolean(station || camera)}
           focus={focus}
@@ -161,6 +184,23 @@ export default function App() {
             {cameras.length} 個快拍點。縮小地圖時會合成一組。
           </p>
         ) : null}
+        {showMtr && trainsLoading ? (
+          <p className="pointer-events-auto w-fit rounded-full bg-white/95 px-3 py-1 text-xs text-stone-600 shadow">
+            正在查列車位置…
+          </p>
+        ) : null}
+        {showMtr && !trainsLoading && fleet.state === 'ready' ? (
+          <p className="pointer-events-auto w-fit rounded-full bg-white/95 px-3 py-1 text-xs text-stone-600 shadow">
+            {fleet.trains.length} 班行駛中，位置按到站時間估算。
+            {fleet.delayed ? ' 部分路綫有延誤。' : ''}
+            {fleet.message ? ` ${fleet.message}` : ''}
+          </p>
+        ) : null}
+        {showMtr && !trainsLoading && fleet.state !== 'ready' ? (
+          <p className="pointer-events-auto max-w-lg rounded-xl bg-white px-3 py-2 text-sm text-stone-700 shadow">
+            {fleet.message}
+          </p>
+        ) : null}
       </header>
 
       {!station && !camera && !styleFailed ? <Legend /> : null}
@@ -188,7 +228,9 @@ function Legend() {
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs leading-5 text-stone-500">點車站查看到站班次，點橙色點查看最新照片。</p>
+            <p className="mt-2 text-xs leading-5 text-stone-500">
+              彩色圓點是行駛中的列車。點車站查看到站班次，點橙色點查看最新照片。
+            </p>
     </aside>
   )
 }

@@ -45,13 +45,18 @@ function parseHongKongTimestamp(value: string | undefined) {
   return Date.UTC(year, month - 1, day, hour - 8, minute, second)
 }
 
-function minutesUntilLabel(arrivalTime: string | undefined, currentTime: string | undefined) {
+export function minutesUntil(arrivalTime: string | undefined, currentTime: string | undefined) {
   const arrival = parseHongKongTimestamp(arrivalTime)
   const current = parseHongKongTimestamp(currentTime)
-  if (arrival == null || current == null) return '—'
+  if (arrival == null || current == null) return null
   let diffMs = arrival - current
   if (diffMs < -18 * 60 * 60 * 1000) diffMs += 24 * 60 * 60 * 1000
-  const minutes = Math.round(diffMs / 60_000)
+  return Math.round(diffMs / 60_000)
+}
+
+function minutesUntilLabel(arrivalTime: string | undefined, currentTime: string | undefined) {
+  const minutes = minutesUntil(arrivalTime, currentTime)
+  if (minutes == null) return '—'
   if (minutes <= 0) return '即將到站'
   return `${minutes} 分鐘`
 }
