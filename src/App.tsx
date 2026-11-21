@@ -46,7 +46,11 @@ export default function App() {
     const run = () => {
       void loadRunningTrains().then((next) => {
         if (cancelled) return
-        setFleet(next)
+        setFleet((current) =>
+          next.state === 'error' && current.trains.length > 0
+            ? { ...current, message: '列車位置暫時未更新。' }
+            : next,
+        )
         setTrainsLoading(false)
         timer = window.setTimeout(run, next.state === 'error' && next.message?.includes('頻密') ? 60_000 : 30_000)
       })

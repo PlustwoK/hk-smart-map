@@ -191,11 +191,17 @@ async function fetchStation(line: string, station: string) {
   )
   if (response.status === 429) return { kind: 'rate' as const }
   if (!response.ok) return { kind: 'error' as const }
-  const body = (await response.json()) as {
+  type ScheduleBody = {
     status?: number | string
     isdelay?: string
     curr_time?: string
     data?: Record<string, { UP?: unknown; DOWN?: unknown; curr_time?: string }>
+  }
+  let body: ScheduleBody
+  try {
+    body = (await response.json()) as ScheduleBody
+  } catch {
+    return { kind: 'error' as const }
   }
   if (body.status === 0 || body.status === '0') return { kind: 'empty' as const }
   const block = body.data?.[`${line}-${station}`]
@@ -222,13 +228,17 @@ async function fetchAll() {
     while (cursor < jobs.length) {
       const job = jobs[cursor]
       cursor += 1
-      const result = await fetchStation(job.line, job.station)
-      if (result.kind === 'rate') rate += 1
-      else if (result.kind === 'error') failed += 1
-      else if (result.kind === 'ok') {
-        ok += 1
-        hits.push(...result.hits)
-      } else ok += 1
+      try {
+        const result = await fetchStation(job.line, job.station)
+        if (result.kind === 'rate') rate += 1
+        else if (result.kind === 'error') failed += 1
+        else if (result.kind === 'ok') {
+          ok += 1
+          hits.push(...result.hits)
+        } else ok += 1
+      } catch {
+        failed += 1
+      }
     }
   }
   await Promise.all(Array.from({ length: 4 }, () => worker()))
@@ -336,7 +346,7 @@ export async function loadRunningTrains(): Promise<Fleet> {
       state: 'ready',
       trains,
       delayed: trains.some((train) => train.delayed),
-      message: rate > 0 ? '部分車站未更新。' : undefined,
+      message: rate > 0 || failed > 0 ? '部分車站未更新。' : undefined,
     }
   } catch {
     return { state: 'error', trains: [], delayed: false, message: '暫時取不到列車位置。' }
