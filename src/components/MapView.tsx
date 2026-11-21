@@ -57,7 +57,9 @@ export function MapView({
     map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
     mapRef.current = map
 
-    map.on('load', () => {
+    let styleReady = false
+    map.once('style.load', () => {
+      styleReady = true
       const textFont = fontStack(map)
       map.addSource('mtr-lines', { type: 'geojson', data: lineFeatures() })
       map.addLayer({
@@ -252,7 +254,7 @@ export function MapView({
     })
 
     const styleTimer = window.setTimeout(() => {
-      if (!map.isStyleLoaded()) handlersRef.current.onStyleFailure()
+      if (!styleReady) handlersRef.current.onStyleFailure()
     }, 20000)
 
     return () => {
